@@ -1,9 +1,8 @@
 package type_structure
 
-
 type Article struct {
-	Id string `json:"Id"`
-	Title string `json:"Title"`
-	Desc string `json:"desc"`
-	Content string `json:"content"`
+	Id             string `json:"Id"`
+	Title          string `json:"Title"`
+	Desciption     string `json:"desc"`
+	ContentArtcile string `json:"content"`
 }
