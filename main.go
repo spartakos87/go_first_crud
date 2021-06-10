@@ -1,7 +1,7 @@
 package main
 
 import (
-	"FirstRestGo/routes"
+	"./routes"
 )
 
 func main() {

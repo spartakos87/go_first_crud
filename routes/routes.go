@@ -1,8 +1,8 @@
 package routes
 
 import (
-	"FirstRestGo/database"
-	"FirstRestGo/type_structure"
+	"../database"
+	"../type_structure"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
