@@ -6,3 +6,8 @@ type Article struct {
 	Desciption     string `json:"desc"`
 	ContentArtcile string `json:"content"`
 }
+
+type Users struct {
+	Username string `json:"username"`
+	Pass     string `json:"pass"`
+}

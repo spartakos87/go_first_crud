@@ -2,6 +2,7 @@ package routes
 
 import (
 	"../database"
+	"../encodecodepass"
 	"../type_structure"
 	"encoding/json"
 	"fmt"
@@ -19,7 +20,6 @@ var Articles = []type_structure.Article{
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "Welcome to the Homepage!")
 	fmt.Println("Endpoint Hit: homePage")
-
 }
 
 func returnAllArticles(w http.ResponseWriter, r *http.Request) {
@@ -123,6 +123,43 @@ func createNewArticleInDB(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func createUser(w http.ResponseWriter, r *http.Request) {
+	db := database.OpenConnection()
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	var temp_user type_structure.Users
+	json.Unmarshal(reqBody, &temp_user)
+	hash_pass, err := encodecodepass.HashPassword(temp_user.Pass)
+	if err != nil {
+		panic(err)
+	}
+	sql_insert := "INSERT INTO Users (username, pass) VALUES ($1, $2)"
+	_, err = db.Exec(sql_insert, temp_user.Username, hash_pass)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		panic(err)
+	}
+	w.WriteHeader(http.StatusOK)
+	defer db.Close()
+
+}
+
+func logInUser(w http.ResponseWriter, r *http.Request) {
+	db := database.OpenConnection()
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	var temp_user, db_user type_structure.Users
+	json.Unmarshal(reqBody, &temp_user)
+	sql_select := "SELECT * FROM Users WHERE username=$1"
+	row := db.QueryRow(sql_select, temp_user.Username)
+	err := row.Scan(&db_user.Username, &db_user.Pass)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+	}
+	if encodecodepass.CheckPassWord(temp_user.Pass, db_user.Pass) == nil {
+		w.WriteHeader(http.StatusOK)
+	}
+	defer db.Close()
+}
+
 func deleteArticle(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -183,6 +220,8 @@ func HandleRequests() {
 	myRouter.HandleFunc("/all_db", returnAllArticlesFromDB)
 	myRouter.HandleFunc("/article", createNewArticle).Methods("POST")
 	myRouter.HandleFunc("/creat_db_article", createNewArticleInDB).Methods("POST")
+	myRouter.HandleFunc("/sign_in", createUser).Methods("POST")
+	myRouter.HandleFunc("/log_in", logInUser).Methods("POST")
 	myRouter.HandleFunc("/article", updateArticle).Methods("PUT")
 	myRouter.HandleFunc("/article_db", updateArticleFromDB).Methods("PUT")
 	myRouter.HandleFunc("/article/{id}", deleteArticle).Methods("DELETE")
