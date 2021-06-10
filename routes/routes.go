@@ -3,6 +3,7 @@ package routes
 import (
 	"../database"
 	"../encodecodepass"
+	"../jwthandler"
 	"../type_structure"
 	"encoding/json"
 	"fmt"
@@ -155,11 +156,25 @@ func logInUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}
 	if encodecodepass.CheckPassWord(temp_user.Pass, db_user.Pass) == nil {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		token, _ := jwthandler.GenerateJWT(temp_user.Username)
+		token_str, _ := json.MarshalIndent(token, "", "\t")
+		w.Write(token_str)
 	}
 	defer db.Close()
 }
 
+func verifyJWT(w http.ResponseWriter, r *http.Request) {
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	var temp_token type_structure.Jwt
+	json.Unmarshal(reqBody, &temp_token)
+	_, err := jwthandler.ValidateJWT(temp_token.Token)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+	}
+	w.WriteHeader(http.StatusOK)
+}
 func deleteArticle(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -220,8 +235,9 @@ func HandleRequests() {
 	myRouter.HandleFunc("/all_db", returnAllArticlesFromDB)
 	myRouter.HandleFunc("/article", createNewArticle).Methods("POST")
 	myRouter.HandleFunc("/creat_db_article", createNewArticleInDB).Methods("POST")
-	myRouter.HandleFunc("/sign_in", createUser).Methods("POST")
+	myRouter.HandleFunc("/sign_up", createUser).Methods("POST")
 	myRouter.HandleFunc("/log_in", logInUser).Methods("POST")
+	myRouter.HandleFunc("/token", verifyJWT).Methods("POST")
 	myRouter.HandleFunc("/article", updateArticle).Methods("PUT")
 	myRouter.HandleFunc("/article_db", updateArticleFromDB).Methods("PUT")
 	myRouter.HandleFunc("/article/{id}", deleteArticle).Methods("DELETE")

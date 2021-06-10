@@ -11,3 +11,7 @@ type Users struct {
 	Username string `json:"username"`
 	Pass     string `json:"pass"`
 }
+
+type Jwt struct {
+	Token string `json:"token"`
+}
