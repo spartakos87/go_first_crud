@@ -8,9 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"time"
 )
 
 var Articles = []type_structure.Article{
@@ -228,6 +232,38 @@ func updateArticleFromDB(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 }
 
+func uploadFile(w http.ResponseWriter, r *http.Request) {
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+	// Create the uploads file if it doent already exists
+	err = os.Mkdir("./uploads", os.ModePerm)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Create a new file in the uploads directory
+	dst, err := os.Create(fmt.Sprintf("./uploads/%d%s", time.Now().UnixNano(), filepath.Ext(fileHeader.Filename)))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	// Copy the uploaded file to the filesystem
+	// at the specified destination
+	_, err = io.Copy(dst, file)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, "Upload successful")
+}
+
 func HandleRequests() {
 	myRouter := mux.NewRouter().StrictSlash(true)
 	myRouter.HandleFunc("/", homePage)
@@ -238,6 +274,7 @@ func HandleRequests() {
 	myRouter.HandleFunc("/sign_up", createUser).Methods("POST")
 	myRouter.HandleFunc("/log_in", logInUser).Methods("POST")
 	myRouter.HandleFunc("/token", verifyJWT).Methods("POST")
+	myRouter.HandleFunc("/uploadfile", uploadFile).Methods("POST")
 	myRouter.HandleFunc("/article", updateArticle).Methods("PUT")
 	myRouter.HandleFunc("/article_db", updateArticleFromDB).Methods("PUT")
 	myRouter.HandleFunc("/article/{id}", deleteArticle).Methods("DELETE")
