@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -264,6 +265,14 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Upload successful")
 }
 
+func downloadFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	filename := vars["filename"]
+	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(filename))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeFile(w, r, "./uploads/1623414617513232878.png")
+}
+
 func HandleRequests() {
 	myRouter := mux.NewRouter().StrictSlash(true)
 	myRouter.HandleFunc("/", homePage)
@@ -275,6 +284,7 @@ func HandleRequests() {
 	myRouter.HandleFunc("/log_in", logInUser).Methods("POST")
 	myRouter.HandleFunc("/token", verifyJWT).Methods("POST")
 	myRouter.HandleFunc("/uploadfile", uploadFile).Methods("POST")
+	myRouter.HandleFunc("/downloadfile/{filename}", downloadFile).Methods("GET")
 	myRouter.HandleFunc("/article", updateArticle).Methods("PUT")
 	myRouter.HandleFunc("/article_db", updateArticleFromDB).Methods("PUT")
 	myRouter.HandleFunc("/article/{id}", deleteArticle).Methods("DELETE")
