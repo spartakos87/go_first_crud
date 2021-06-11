@@ -2,13 +2,20 @@ package routes
 
 import (
 	"../database"
+	"../encodecodepass"
+	"../jwthandler"
 	"../type_structure"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
 )
 
 var Articles = []type_structure.Article{
@@ -19,7 +26,6 @@ var Articles = []type_structure.Article{
 func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "Welcome to the Homepage!")
 	fmt.Println("Endpoint Hit: homePage")
-
 }
 
 func returnAllArticles(w http.ResponseWriter, r *http.Request) {
@@ -123,6 +129,57 @@ func createNewArticleInDB(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func createUser(w http.ResponseWriter, r *http.Request) {
+	db := database.OpenConnection()
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	var temp_user type_structure.Users
+	json.Unmarshal(reqBody, &temp_user)
+	hash_pass, err := encodecodepass.HashPassword(temp_user.Pass)
+	if err != nil {
+		panic(err)
+	}
+	sql_insert := "INSERT INTO Users (username, pass) VALUES ($1, $2)"
+	_, err = db.Exec(sql_insert, temp_user.Username, hash_pass)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		panic(err)
+	}
+	w.WriteHeader(http.StatusOK)
+	defer db.Close()
+
+}
+
+func logInUser(w http.ResponseWriter, r *http.Request) {
+	db := database.OpenConnection()
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	var temp_user, db_user type_structure.Users
+	json.Unmarshal(reqBody, &temp_user)
+	sql_select := "SELECT * FROM Users WHERE username=$1"
+	row := db.QueryRow(sql_select, temp_user.Username)
+	err := row.Scan(&db_user.Username, &db_user.Pass)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+	}
+	if encodecodepass.CheckPassWord(temp_user.Pass, db_user.Pass) == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		token, _ := jwthandler.GenerateJWT(temp_user.Username)
+		token_str, _ := json.MarshalIndent(token, "", "\t")
+		w.Write(token_str)
+	}
+	defer db.Close()
+}
+
+func verifyJWT(w http.ResponseWriter, r *http.Request) {
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	var temp_token type_structure.Jwt
+	json.Unmarshal(reqBody, &temp_token)
+	_, err := jwthandler.ValidateJWT(temp_token.Token)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+	}
+	w.WriteHeader(http.StatusOK)
+}
 func deleteArticle(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
@@ -176,6 +233,46 @@ func updateArticleFromDB(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 }
 
+func uploadFile(w http.ResponseWriter, r *http.Request) {
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+	// Create the uploads file if it doent already exists
+	err = os.Mkdir("./uploads", os.ModePerm)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Create a new file in the uploads directory
+	dst, err := os.Create(fmt.Sprintf("./uploads/%d%s", time.Now().UnixNano(), filepath.Ext(fileHeader.Filename)))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	// Copy the uploaded file to the filesystem
+	// at the specified destination
+	_, err = io.Copy(dst, file)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, "Upload successful")
+}
+
+func downloadFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	filename := vars["filename"]
+	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(filename))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeFile(w, r, "./uploads/1623414617513232878.png")
+}
+
 func HandleRequests() {
 	myRouter := mux.NewRouter().StrictSlash(true)
 	myRouter.HandleFunc("/", homePage)
@@ -183,6 +280,11 @@ func HandleRequests() {
 	myRouter.HandleFunc("/all_db", returnAllArticlesFromDB)
 	myRouter.HandleFunc("/article", createNewArticle).Methods("POST")
 	myRouter.HandleFunc("/creat_db_article", createNewArticleInDB).Methods("POST")
+	myRouter.HandleFunc("/sign_up", createUser).Methods("POST")
+	myRouter.HandleFunc("/log_in", logInUser).Methods("POST")
+	myRouter.HandleFunc("/token", verifyJWT).Methods("POST")
+	myRouter.HandleFunc("/uploadfile", uploadFile).Methods("POST")
+	myRouter.HandleFunc("/downloadfile/{filename}", downloadFile).Methods("GET")
 	myRouter.HandleFunc("/article", updateArticle).Methods("PUT")
 	myRouter.HandleFunc("/article_db", updateArticleFromDB).Methods("PUT")
 	myRouter.HandleFunc("/article/{id}", deleteArticle).Methods("DELETE")
